@@ -3,7 +3,6 @@ import { io } from 'socket.io-client';
 import './styles.css';
 
 function App() {
-  // State variables for game data and UI
   const [roomCode, setRoomCode] = useState('');
   const [isCreatingGame, setIsCreatingGame] = useState(true);
   const [gameStarted, setGameStarted] = useState(false);
@@ -15,25 +14,23 @@ function App() {
   const [socket, setSocket] = useState(null);
   const [showRoomCode, setShowRoomCode] = useState(false);
   const [connectionError, setConnectionError] = useState('');
+  const [callResult, setCallResult] = useState(null);
 
-  // Update the backend URL to your deployed backend on Render
+  // Replace with your deployed backend URL from Render
   const backendURL = "https://your-backend-service.onrender.com";
 
   useEffect(() => {
     if (!playerName || !roomCode || !gameStarted) return;
     
-    const socketIO = io(backendURL, {
-      transports: ['websocket'],
-      query: { playerName, roomCode }
-    });
-
+    const socketIO = io(backendURL, { transports: ['websocket'], query: { playerName, roomCode } });
+    
     socketIO.on('connect', () => {
       console.log('Connected to backend');
       socketIO.emit('join_room', { room_id: roomCode, player_id: playerName });
     });
 
     socketIO.on('game_state', (data) => {
-      console.log("Game state received:", data);
+      console.log("Game state:", data);
       setPlayers(prev => {
         if (!prev.find(p => p.id === playerName)) {
           return [...prev, { id: playerName, name: playerName, hand: data.hand, score: 0 }];
@@ -45,7 +42,7 @@ function App() {
     });
 
     socketIO.on('player_joined', (data) => {
-      console.log(`${data.player_id} joined the game`);
+      console.log(`${data.player_id} joined`);
       setPlayers(data.players.map(pid => ({
         id: pid,
         name: pid,
@@ -77,21 +74,24 @@ function App() {
       );
     });
 
+    socketIO.on('call_result', (data) => {
+      console.log("Call result:", data);
+      setCallResult(data);
+    });
+
     socketIO.on('error', (data) => {
       setConnectionError(data.message);
     });
 
     setSocket(socketIO);
-
     return () => {
       socketIO.disconnect();
     };
-
   }, [playerName, roomCode, gameStarted]);
 
   const handleCreateGame = () => {
-    const newRoomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-    setRoomCode(newRoomCode);
+    const newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+    setRoomCode(newCode);
     setShowRoomCode(true);
     handleStartGame();
   };
@@ -120,46 +120,56 @@ function App() {
     }
   };
 
+  const handleCall = () => {
+    if (socket && currentTurn === playerName) {
+      socket.emit('call', { player_id: playerName });
+    }
+  };
+
   const resetGame = () => {
     window.location.reload();
   };
 
+  // Helper to get card image URL (ensure images are in public/cards folder)
+  const getCardImageURL = (card) => {
+    // File naming format: {value}_of_{suit}.png (e.g., 1_of_hearts.png)
+    return `/cards/${card.value}_of_${card.suit.toLowerCase()}.png`;
+  };
+
   if (!gameStarted) {
     return (
-      <div className="container">
-        <div className="setup-container">
-          <h1 className="title">Fadu Card Game</h1>
+      <div className="container setup-container">
+        <h1 className="title">Fadu Card Game</h1>
+        <input
+          type="text"
+          placeholder="Enter your name"
+          value={playerName}
+          onChange={e => setPlayerName(e.target.value)}
+        />
+        <div className="mode-selector">
+          <button onClick={() => setIsCreatingGame(true)}>Create Room</button>
+          <button onClick={() => setIsCreatingGame(false)}>Join Room</button>
+        </div>
+        {isCreatingGame ? (
+          <button className="btn" onClick={handleCreateGame}>Create Room</button>
+        ) : (
           <input
             type="text"
-            placeholder="Enter your name"
-            value={playerName}
-            onChange={e => setPlayerName(e.target.value)}
+            placeholder="Enter room code"
+            value={roomCode}
+            onChange={e => setRoomCode(e.target.value.toUpperCase())}
           />
-          <div className="mode-selector">
-            <button onClick={() => setIsCreatingGame(true)}>Create Room</button>
-            <button onClick={() => setIsCreatingGame(false)}>Join Room</button>
+        )}
+        <button className="btn" onClick={isCreatingGame ? handleCreateGame : handleJoinGame}>
+          Start Game
+        </button>
+        {showRoomCode && (
+          <div className="room-code">
+            <p>Your Room Code: <strong>{roomCode}</strong></p>
+            <p>Share this with friends!</p>
           </div>
-          {isCreatingGame ? (
-            <button className="btn" onClick={handleCreateGame}>Create Room</button>
-          ) : (
-            <input
-              type="text"
-              placeholder="Enter room code"
-              value={roomCode}
-              onChange={e => setRoomCode(e.target.value.toUpperCase())}
-            />
-          )}
-          <button className="btn" onClick={isCreatingGame ? handleCreateGame : handleJoinGame}>
-            Start Game
-          </button>
-          {showRoomCode && (
-            <div className="room-code">
-              <p>Your Room Code: <strong>{roomCode}</strong></p>
-              <p>Share this code with others to join!</p>
-            </div>
-          )}
-          {connectionError && <p className="error">{connectionError}</p>}
-        </div>
+        )}
+        {connectionError && <p className="error">{connectionError}</p>}
       </div>
     );
   }
@@ -177,7 +187,7 @@ function App() {
             {tableCards && tableCards.length > 0 ? (
               tableCards.map((card, index) => (
                 <div key={index} className="card">
-                  <p>{card.value} of {card.suit}</p>
+                  <img src={getCardImageURL(card)} alt={`${card.value} of ${card.suit}`} className="card-image" />
                 </div>
               ))
             ) : (
@@ -192,9 +202,9 @@ function App() {
               <div
                 key={index}
                 className={`card ${selectedCard === index ? 'selected' : ''}`}
-                onClick={() => { if (currentTurn === playerName) setSelectedCard(index); }}
+                onClick={() => currentTurn === playerName && setSelectedCard(index)}
               >
-                <p>{card.value} of {card.suit}</p>
+                <img src={getCardImageURL(card)} alt={`${card.value} of ${card.suit}`} className="card-image" />
               </div>
             ))}
           </div>
@@ -205,8 +215,30 @@ function App() {
             <button className="btn" onClick={playCard} disabled={currentTurn !== playerName || selectedCard === null}>
               Play Card
             </button>
-            <button className="btn" onClick={resetGame}>Reset Game</button>
+            <button className="btn" onClick={handleCall} disabled={currentTurn !== playerName}>
+              Call
+            </button>
+            <button className="btn" onClick={resetGame}>
+              Reset Game
+            </button>
           </div>
+          {callResult && (
+            <div className="call-result">
+              <h4>Call Result: {callResult.result === "win" ? "You Win!" : "You Lose!"}</h4>
+              <p>Hand Totals:</p>
+              <ul>
+                {Object.entries(callResult.player_sums).map(([pid, total]) => (
+                  <li key={pid}>{pid}: {total} points</li>
+                ))}
+              </ul>
+              <p>Scores:</p>
+              <ul>
+                {Object.entries(callResult.scores).map(([pid, score]) => (
+                  <li key={pid}>{pid}: {score} points</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </div>
     </div>
