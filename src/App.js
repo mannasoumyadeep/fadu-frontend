@@ -19,11 +19,24 @@ function App() {
   // Replace with your deployed backend URL from Render
   const backendURL = "https://your-backend-service.onrender.com";
 
+  // Map card values to friendly names for image file names
+  const getCardImageURL = (card) => {
+    const valueMap = {
+      1: "ace",
+      11: "jack",
+      12: "queen",
+      13: "king"
+    };
+    const valueStr = valueMap[card.value] || card.value;
+    // Ensure your card images are in public/cards folder
+    return `/cards/${valueStr}_of_${card.suit.toLowerCase()}.png`;
+  };
+
   useEffect(() => {
     if (!playerName || !roomCode || !gameStarted) return;
-    
+
     const socketIO = io(backendURL, { transports: ['websocket'], query: { playerName, roomCode } });
-    
+
     socketIO.on('connect', () => {
       console.log('Connected to backend');
       socketIO.emit('join_room', { room_id: roomCode, player_id: playerName });
@@ -128,12 +141,6 @@ function App() {
 
   const resetGame = () => {
     window.location.reload();
-  };
-
-  // Helper to get card image URL (ensure images are in public/cards folder)
-  const getCardImageURL = (card) => {
-    // File naming format: {value}_of_{suit}.png (e.g., 1_of_hearts.png)
-    return `/cards/${card.value}_of_${card.suit.toLowerCase()}.png`;
   };
 
   if (!gameStarted) {
