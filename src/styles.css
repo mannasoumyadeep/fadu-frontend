@@ -3,11 +3,11 @@ body, html {
   margin: 0;
   padding: 0;
   font-family: 'Arial', sans-serif;
-  background: #2b2d42;
-  color: #edf2f4;
+  background: #1f2937; /* Darker background for contrast */
+  color: #e5e7eb;      /* Light gray text */
 }
 
-.container {
+.app-container {
   max-width: 1200px;
   margin: 0 auto;
   padding: 20px;
@@ -15,7 +15,7 @@ body, html {
 
 /* Setup Screen */
 .setup-container {
-  background: #3a3f58;
+  background: #374151;
   padding: 30px;
   border-radius: 8px;
   text-align: center;
@@ -26,7 +26,7 @@ body, html {
 .title {
   font-size: 2.5rem;
   margin-bottom: 20px;
-  color: #edf2f4;
+  color: #f9fafb;
 }
 
 input[type="text"] {
@@ -40,8 +40,8 @@ input[type="text"] {
 
 .mode-selector button,
 .btn {
-  background: #ef233c;
-  color: #edf2f4;
+  background: #ef4444;
+  color: #f9fafb;
   padding: 12px 24px;
   margin: 10px;
   border: none;
@@ -53,57 +53,79 @@ input[type="text"] {
 
 .mode-selector button:hover,
 .btn:hover {
-  background: #d90429;
+  background: #dc2626;
 }
 
 .room-code {
   margin-top: 20px;
   font-size: 1.2rem;
-  color: #edf2f4;
+  color: #f9fafb;
 }
 
 .error {
-  color: #ff0000;
+  color: #f87171;
   margin-top: 10px;
 }
 
 /* Game Screen */
-.game-container {
-  background: #3a3f58;
+.game-board {
+  background: #374151;
   border-radius: 8px;
   padding: 20px;
   margin-top: 20px;
   box-shadow: 0 4px 10px rgba(0,0,0,0.3);
 }
 
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.header, .players-section, .table-section, .hand-section {
   margin-bottom: 20px;
 }
 
-.table {
-  border: 2px dashed #edf2f4;
-  padding: 20px;
-  margin-bottom: 20px;
-  border-radius: 8px;
-  background: #2b2d42;
+.header h2, .header h3 {
+  color: #f9fafb;
 }
 
-.table h3 {
-  margin-top: 0;
-}
-
-.table-cards, .hand {
+.players-list {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 10px;
 }
 
+.player-card {
+  background: #f9fafb;
+  color: #1f2937;
+  border: 2px solid #f9fafb;
+}
+
+.player-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.player-info, .player-score {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.icon {
+  width: 16px;
+  height: 16px;
+}
+
+.table-section, .hand-section {
+  color: #f9fafb;
+}
+
+.table-cards {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .card {
-  background: #edf2f4;
-  border: 2px solid #edf2f4;
+  background: #f9fafb;
+  border: 2px solid #f9fafb;
   border-radius: 4px;
   width: 100px;
   height: 140px;
@@ -116,40 +138,33 @@ input[type="text"] {
   transform: scale(1.05);
 }
 
-.card.selected {
-  border-color: #ef233c;
+.selected {
+  border-color: #f87171;
 }
 
 .card-image {
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  border-radius: 4px;
+  object-fit: contain;
 }
 
 .controls {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
   margin-top: 20px;
-  text-align: center;
 }
 
 .call-result {
-  background: #edf2f4;
-  color: #2b2d42;
+  background: #f9fafb;
+  color: #1f2937;
   padding: 15px;
   border-radius: 8px;
   margin-top: 20px;
-  text-align: left;
 }
 
-.base-class {
-  padding: 20px;
-  background-color: lightgray;
-  border: 1px solid #ccc;
-  font-size: 1.2rem;
+.result-details {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
-
-.active-class {
-  background-color: lightgreen;
-  border-color: green;
-}
-
