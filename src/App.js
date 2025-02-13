@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
-import './styles.css';
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Trophy, Users, RefreshCcw, HandMetal } from "lucide-react";
 
-function App() {
+const App = () => {
   const [roomCode, setRoomCode] = useState('');
   const [isCreatingGame, setIsCreatingGame] = useState(true);
   const [gameStarted, setGameStarted] = useState(false);
@@ -15,21 +19,15 @@ function App() {
   const [showRoomCode, setShowRoomCode] = useState(false);
   const [connectionError, setConnectionError] = useState('');
   const [callResult, setCallResult] = useState(null);
+  const [gameStatus, setGameStatus] = useState('waiting'); // waiting, playing, ended
 
-  // Replace with your deployed backend URL from Render
-  const backendURL = "https://your-backend-service.onrender.com";
+  const backendURL = process.env.REACT_APP_BACKEND_URL || "http://localhost:8080";
 
-  // Map card values to friendly names for image file names
   const getCardImageURL = (card) => {
-    const valueMap = {
-      1: "ace",
-      11: "jack",
-      12: "queen",
-      13: "king"
-    };
+    if (!card) return null;
+    const valueMap = { 1: "ace", 11: "jack", 12: "queen", 13: "king" };
     const valueStr = valueMap[card.value] || card.value;
-    // Ensure your card images are in public/cards folder
-    return `/cards/${valueStr}_of_${card.suit.toLowerCase()}.png`;
+    return `/playing-cards/${valueStr}_of_${card.suit.toLowerCase()}.svg`;
   };
 
   useEffect(() => {
@@ -38,12 +36,10 @@ function App() {
     const socketIO = io(backendURL, { transports: ['websocket'], query: { playerName, roomCode } });
 
     socketIO.on('connect', () => {
-      console.log('Connected to backend');
       socketIO.emit('join_room', { room_id: roomCode, player_id: playerName });
     });
 
     socketIO.on('game_state', (data) => {
-      console.log("Game state:", data);
       setPlayers(prev => {
         if (!prev.find(p => p.id === playerName)) {
           return [...prev, { id: playerName, name: playerName, hand: data.hand, score: 0 }];
@@ -52,10 +48,10 @@ function App() {
       });
       setCurrentTurn(data.current_turn);
       setTableCards(data.table_cards || []);
+      setGameStatus('playing');
     });
 
     socketIO.on('player_joined', (data) => {
-      console.log(`${data.player_id} joined`);
       setPlayers(data.players.map(pid => ({
         id: pid,
         name: pid,
@@ -65,7 +61,6 @@ function App() {
     });
 
     socketIO.on('card_played', (data) => {
-      console.log("Card played:", data);
       setTableCards(data.table_cards);
       setCurrentTurn(data.current_turn);
       setSelectedCard(null);
@@ -88,8 +83,8 @@ function App() {
     });
 
     socketIO.on('call_result', (data) => {
-      console.log("Call result:", data);
       setCallResult(data);
+      setGameStatus('ended');
     });
 
     socketIO.on('error', (data) => {
@@ -97,159 +92,177 @@ function App() {
     });
 
     setSocket(socketIO);
-    return () => {
-      socketIO.disconnect();
-    };
+    return () => socketIO.disconnect();
   }, [playerName, roomCode, gameStarted]);
 
-  const handleCreateGame = () => {
-    const newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-    setRoomCode(newCode);
-    setShowRoomCode(true);
-    handleStartGame();
-  };
-
-  const handleJoinGame = () => {
-    handleStartGame();
-  };
-
-  const handleStartGame = () => {
-    if (!playerName.trim()) {
-      alert("Please enter your name");
-      return;
-    }
-    setGameStarted(true);
-  };
-
-  const drawCard = () => {
-    if (socket && currentTurn === playerName) {
-      socket.emit('draw_card', { player_id: playerName });
-    }
-  };
-
-  const playCard = () => {
-    if (socket && currentTurn === playerName && selectedCard !== null) {
-      socket.emit('play_card', { player_id: playerName, card_index: selectedCard });
-    }
-  };
-
-  const handleCall = () => {
-    if (socket && currentTurn === playerName) {
-      socket.emit('call', { player_id: playerName });
-    }
-  };
-
-  const resetGame = () => {
-    window.location.reload();
-  };
-
-  if (!gameStarted) {
-    return (
-      <div className="container setup-container">
-        <h1 className="title">Fadu Card Game</h1>
-        <input
+  const SetupScreen = () => (
+    <Card className="w-full max-w-md mx-auto mt-8">
+      <CardHeader className="text-center">
+        <h1 className="text-2xl font-bold">Fadu Card Game</h1>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <Input
           type="text"
           placeholder="Enter your name"
           value={playerName}
           onChange={e => setPlayerName(e.target.value)}
         />
-        <div className="mode-selector">
-          <button onClick={() => setIsCreatingGame(true)}>Create Room</button>
-          <button onClick={() => setIsCreatingGame(false)}>Join Room</button>
+        <div className="flex gap-2">
+          <Button onClick={() => setIsCreatingGame(true)} variant={isCreatingGame ? "default" : "outline"} className="flex-1">
+            Create Room
+          </Button>
+          <Button onClick={() => setIsCreatingGame(false)} variant={!isCreatingGame ? "default" : "outline"} className="flex-1">
+            Join Room
+          </Button>
         </div>
         {isCreatingGame ? (
-          <button className="btn" onClick={handleCreateGame}>Create Room</button>
+          <Button onClick={() => {
+            const newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+            setRoomCode(newCode);
+            setShowRoomCode(true);
+            setGameStarted(true);
+          }} className="w-full">
+            Create New Room
+          </Button>
         ) : (
-          <input
-            type="text"
-            placeholder="Enter room code"
-            value={roomCode}
-            onChange={e => setRoomCode(e.target.value.toUpperCase())}
-          />
+          <>
+            <Input
+              type="text"
+              placeholder="Enter room code"
+              value={roomCode}
+              onChange={e => setRoomCode(e.target.value.toUpperCase())}
+            />
+            <Button onClick={() => setGameStarted(true)} className="w-full">
+              Join Room
+            </Button>
+          </>
         )}
-        <button className="btn" onClick={isCreatingGame ? handleCreateGame : handleJoinGame}>
-          Start Game
-        </button>
         {showRoomCode && (
-          <div className="room-code">
-            <p>Your Room Code: <strong>{roomCode}</strong></p>
-            <p>Share this with friends!</p>
-          </div>
+          <Alert>
+            <AlertDescription>
+              Room Code: <span className="font-mono font-bold">{roomCode}</span>
+              <p className="text-sm mt-1">Share this with friends!</p>
+            </AlertDescription>
+          </Alert>
         )}
-        {connectionError && <p className="error">{connectionError}</p>}
-      </div>
-    );
-  }
+        {connectionError && (
+          <Alert variant="destructive">
+            <AlertDescription>{connectionError}</AlertDescription>
+          </Alert>
+        )}
+      </CardContent>
+    </Card>
+  );
 
-  return (
-    <div className="container">
-      <div className="game-container">
-        <div className="header">
-          <h2>Room: {roomCode}</h2>
-          <h3>Current Turn: {currentTurn}</h3>
-        </div>
-        <div className="table">
-          <h3>Table</h3>
-          <div className="table-cards">
-            {tableCards && tableCards.length > 0 ? (
-              tableCards.map((card, index) => (
-                <div key={index} className="card">
-                  <img src={getCardImageURL(card)} alt={`${card.value} of ${card.suit}`} className="card-image" />
-                </div>
-              ))
-            ) : (
-              <p>No cards played yet.</p>
-            )}
+  const PlayerCard = ({ player, isCurrentPlayer }) => (
+    <Card className={`w-full ${isCurrentPlayer ? 'bg-primary/10' : 'bg-background'}`}>
+      <CardHeader className="p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            <span className="font-semibold">{player.name}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Trophy className="h-4 w-4" />
+            <span>{player.score || 0}</span>
           </div>
         </div>
-        <div className="player-area">
-          <h3>Your Hand</h3>
-          <div className="hand">
+      </CardHeader>
+    </Card>
+  );
+
+  const GameBoard = () => (
+    <div className="space-y-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold">Players</h3>
+          <div className="grid gap-2">
+            {players.map(player => (
+              <PlayerCard key={player.id} player={player} isCurrentPlayer={currentTurn === player.id} />
+            ))}
+          </div>
+        </div>
+        <Card className="h-full">
+          <CardHeader className="p-4">
+            <h3 className="text-lg font-semibold">Table Cards</h3>
+          </CardHeader>
+          <CardContent className="p-4">
+            <div className="flex flex-wrap gap-2">
+              {tableCards.length > 0 ? tableCards.map((card, index) => (
+                <div key={index} className="relative w-24 h-32">
+                  <img src={getCardImageURL(card)} alt={`${card.value} of ${card.suit}`} className="w-full h-full object-contain" />
+                </div>
+              )) : <p>No cards played yet.</p>}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+      <Card className="mt-8">
+        <CardHeader className="p-4">
+          <h3 className="text-lg font-semibold">Your Hand</h3>
+        </CardHeader>
+        <CardContent className="p-4">
+          <div className="flex flex-wrap gap-2 justify-center">
             {players.find(p => p.id === playerName)?.hand.map((card, index) => (
-              <div
-                key={index}
-                className={`card ${selectedCard === index ? 'selected' : ''}`}
+              <div key={index}
                 onClick={() => currentTurn === playerName && setSelectedCard(index)}
-              >
-                <img src={getCardImageURL(card)} alt={`${card.value} of ${card.suit}`} className="card-image" />
+                className={`relative w-24 h-32 transition-transform hover:scale-110 cursor-pointer ${selectedCard === index ? 'ring-2 ring-primary' : ''}`}>
+                <img src={getCardImageURL(card)} alt={`${card.value} of ${card.suit}`} className="w-full h-full object-contain" />
               </div>
             ))}
           </div>
-          <div className="controls">
-            <button className="btn" onClick={drawCard} disabled={currentTurn !== playerName}>
-              Draw Card
-            </button>
-            <button className="btn" onClick={playCard} disabled={currentTurn !== playerName || selectedCard === null}>
-              Play Card
-            </button>
-            <button className="btn" onClick={handleCall} disabled={currentTurn !== playerName}>
-              Call
-            </button>
-            <button className="btn" onClick={resetGame}>
-              Reset Game
-            </button>
+          <div className="flex justify-center gap-4 mt-6">
+            <Button onClick={() => socket?.emit('draw_card', { player_id: playerName })} disabled={currentTurn !== playerName}>
+              <RefreshCcw className="mr-2 h-4 w-4" /> Draw Card
+            </Button>
+            <Button onClick={() => selectedCard !== null && socket?.emit('play_card', { player_id: playerName, card_index: selectedCard })}
+              disabled={currentTurn !== playerName || selectedCard === null} variant="secondary">
+              Play Selected Card
+            </Button>
+            <Button onClick={() => socket?.emit('call', { player_id: playerName })}
+              disabled={currentTurn !== playerName} variant="destructive">
+              <HandMetal className="mr-2 h-4 w-4" /> Call
+            </Button>
           </div>
-          {callResult && (
-            <div className="call-result">
-              <h4>Call Result: {callResult.result === "win" ? "You Win!" : "You Lose!"}</h4>
-              <p>Hand Totals:</p>
-              <ul>
-                {Object.entries(callResult.player_sums).map(([pid, total]) => (
-                  <li key={pid}>{pid}: {total} points</li>
-                ))}
-              </ul>
-              <p>Scores:</p>
-              <ul>
-                {Object.entries(callResult.scores).map(([pid, score]) => (
-                  <li key={pid}>{pid}: {score} points</li>
-                ))}
-              </ul>
+        </CardContent>
+      </Card>
+      {callResult && (
+        <Alert>
+          <AlertDescription>
+            <div className="space-y-2">
+              <h4 className="font-semibold">Call Result: {callResult.result === "win" ? "You Won!" : "You Lost"}</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <h5 className="font-medium">Hand Totals:</h5>
+                  <ul>
+                    {Object.entries(callResult.player_sums).map(([pid, total]) => (
+                      <li key={pid}>{pid}: {total} points</li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <h5 className="font-medium">Scores:</h5>
+                  <ul>
+                    {Object.entries(callResult.scores).map(([pid, score]) => (
+                      <li key={pid}>{pid}: {score} points</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
             </div>
-          )}
-        </div>
+          </AlertDescription>
+        </Alert>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-background p-4 md:p-8">
+      <div className="container mx-auto max-w-6xl">
+        {!gameStarted ? <SetupScreen /> : <GameBoard />}
       </div>
     </div>
   );
-}
+};
 
 export default App;
