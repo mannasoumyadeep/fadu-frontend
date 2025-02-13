@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import clsx from 'clsx';
 import { io } from 'socket.io-client';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Card, CardContent, CardHeader } from "./components/ui/card";
+import { Button } from "./components/ui/button";
+import { Input } from "./components/ui/input";
+import { Alert, AlertDescription } from "./components/ui/alert";
 import { Trophy, Users, RefreshCcw, HandMetal } from 'lucide-react';
 
 const App = () => {
@@ -14,7 +14,7 @@ const App = () => {
   const [players, setPlayers] = useState([]);
   const [currentTurn, setCurrentTurn] = useState(null);
   const [tableCards, setTableCards] = useState([]);
-  const [selectedCard, setSelectedCard] = useState(null);
+  const [selectedCards, setSelectedCards] = useState([]); // array of indices
   const [playerName, setPlayerName] = useState('');
   const [socket, setSocket] = useState(null);
   const [showRoomCode, setShowRoomCode] = useState(false);
@@ -24,17 +24,16 @@ const App = () => {
 
   const backendURL = process.env.REACT_APP_BACKEND_URL || "http://localhost:8080";
 
-  // Helper function to get card image URL
+  // Helper function to get card image URL (assuming PNG images)
   const getCardImageURL = (card) => {
     if (!card) return null;
     const valueMap = { 1: "ace", 11: "jack", 12: "queen", 13: "king" };
     const valueStr = valueMap[card.value] || card.value;
-    return `/playing-cards/${valueStr}_of_${card.suit.toLowerCase()}.svg`;
+    return `/playing-cards/${valueStr}_of_${card.suit.toLowerCase()}.png`;
   };
 
   useEffect(() => {
     if (!playerName || !roomCode || !gameStarted) return;
-
     const socketIO = io(backendURL, { transports: ['websocket'], query: { playerName, roomCode } });
 
     socketIO.on('connect', () => {
@@ -65,7 +64,7 @@ const App = () => {
     socketIO.on('card_played', (data) => {
       setTableCards(data.table_cards);
       setCurrentTurn(data.current_turn);
-      setSelectedCard(null);
+      setSelectedCards([]);
     });
 
     socketIO.on('hand_updated', (data) => {
@@ -97,7 +96,20 @@ const App = () => {
     return () => socketIO.disconnect();
   }, [playerName, roomCode, gameStarted]);
 
-  // Setup Screen Component
+  // Toggle selection: if table exists, only allow cards matching the top card value
+  const toggleCardSelection = (index) => {
+    if (currentTurn !== playerName) return;
+    const myHand = players.find(p => p.id === playerName)?.hand;
+    if (!myHand) return;
+    if (tableCards.length > 0) {
+      const topValue = tableCards[tableCards.length - 1].value;
+      if (myHand[index].value !== topValue) return;
+    }
+    setSelectedCards(prev =>
+      prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]
+    );
+  };
+
   const SetupScreen = () => (
     <Card className="w-full max-w-md mx-auto mt-8">
       <CardHeader className="text-center">
@@ -111,31 +123,21 @@ const App = () => {
           onChange={e => setPlayerName(e.target.value)}
         />
         <div className="flex gap-2">
-          <Button 
-            onClick={() => setIsCreatingGame(true)} 
-            variant={isCreatingGame ? "default" : "outline"} 
-            className="flex-1"
-          >
+          <Button onClick={() => setIsCreatingGame(true)} variant={isCreatingGame ? "default" : "outline"} className="flex-1">
             Create Room
           </Button>
-          <Button 
-            onClick={() => setIsCreatingGame(false)} 
-            variant={!isCreatingGame ? "default" : "outline"} 
-            className="flex-1"
-          >
+          <Button onClick={() => setIsCreatingGame(false)} variant={!isCreatingGame ? "default" : "outline"} className="flex-1">
             Join Room
           </Button>
         </div>
         {isCreatingGame ? (
-          <Button
-            onClick={() => {
-              const newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-              setRoomCode(newCode);
-              setShowRoomCode(true);
-              setGameStarted(true);
-            }}
-            className="w-full"
-          >
+          <Button onClick={() => {
+            let newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+            if(newCode.length < 6) newCode = newCode.padEnd(6, 'A');
+            setRoomCode(newCode);
+            setShowRoomCode(true);
+            setGameStarted(true);
+          }} className="w-full">
             Create New Room
           </Button>
         ) : (
@@ -168,9 +170,8 @@ const App = () => {
     </Card>
   );
 
-  // Player Card Component
   const PlayerCard = ({ player, isCurrentPlayer }) => (
-    <Card className={clsx("w-full", isCurrentPlayer ? "bg-primary/10" : "bg-background")}>
+    <Card className={clsx("w-full", isCurrentPlayer ? "bg-primary/10" : "bg-background", "shadow-md")}>
       <CardHeader className="p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -186,19 +187,14 @@ const App = () => {
     </Card>
   );
 
-  // Main Game Board Component
   const GameBoard = () => (
     <div className="space-y-8">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-4">
-          <h3 className="text-lg font-semibold">Players</h3>
+          <h3 className="text-lg font-semibold text-white">Players</h3>
           <div className="grid gap-2">
             {players.map(player => (
-              <PlayerCard
-                key={player.id}
-                player={player}
-                isCurrentPlayer={currentTurn === player.id}
-              />
+              <PlayerCard key={player.id} player={player} isCurrentPlayer={currentTurn === player.id} />
             ))}
           </div>
         </div>
@@ -209,17 +205,15 @@ const App = () => {
           <CardContent className="p-4">
             <div className="flex flex-wrap gap-2">
               {tableCards.length > 0 ? (
-                tableCards.map((card, index) => (
-                  <div key={index} className="relative w-24 h-32">
-                    <img
-                      src={getCardImageURL(card)}
-                      alt={`${card.value} of ${card.suit}`}
-                      className="w-full h-full object-contain"
-                    />
-                  </div>
-                ))
+                <div className="relative w-24 h-32 border border-white rounded">
+                  <img
+                    src={getCardImageURL(tableCards[tableCards.length - 1])}
+                    alt={`${tableCards[tableCards.length - 1].value} of ${tableCards[tableCards.length - 1].suit}`}
+                    className="w-full h-full object-contain"
+                  />
+                </div>
               ) : (
-                <p>No cards played yet.</p>
+                <p className="text-white">No cards played yet.</p>
               )}
             </div>
           </CardContent>
@@ -234,10 +228,10 @@ const App = () => {
             {players.find(p => p.id === playerName)?.hand.map((card, index) => (
               <div
                 key={index}
-                onClick={() => currentTurn === playerName && setSelectedCard(index)}
+                onClick={() => toggleCardSelection(index)}
                 className={clsx(
-                  "relative w-24 h-32 transition-transform hover:scale-110 cursor-pointer",
-                  selectedCard === index && "ring-2 ring-primary"
+                  "relative w-24 h-32 transition-transform hover:scale-110 cursor-pointer border border-white rounded",
+                  selectedCards.includes(index) && "ring-2 ring-primary"
                 )}
               >
                 <img
@@ -256,14 +250,11 @@ const App = () => {
               <RefreshCcw className="mr-2 h-4 w-4" /> Draw Card
             </Button>
             <Button
-              onClick={() =>
-                selectedCard !== null &&
-                socket?.emit('play_card', { player_id: playerName, card_index: selectedCard })
-              }
-              disabled={currentTurn !== playerName || selectedCard === null}
+              onClick={() => selectedCards.length > 0 && socket?.emit('play_card', { player_id: playerName, card_indices: selectedCards })}
+              disabled={currentTurn !== playerName || selectedCards.length === 0}
               variant="secondary"
             >
-              Play Selected Card
+              Play Selected Cards
             </Button>
             <Button
               onClick={() => socket?.emit('call', { player_id: playerName })}
@@ -308,7 +299,7 @@ const App = () => {
   );
 
   return (
-    <div className="min-h-screen bg-background p-4 md:p-8">
+    <div className="min-h-screen bg-gray-900 p-4 md:p-8">
       <div className="container mx-auto max-w-6xl">
         {!gameStarted ? <SetupScreen /> : <GameBoard />}
       </div>
