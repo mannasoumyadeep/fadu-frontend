@@ -9,17 +9,17 @@ const App = () => {
   const [players, setPlayers] = useState([]);
   const [currentTurn, setCurrentTurn] = useState(null);
   const [tableCards, setTableCards] = useState([]);
-  const [selectedCards, setSelectedCards] = useState([]); // Array for multi-card selection
+  const [selectedCards, setSelectedCards] = useState([]); // indices for multi-card selection
   const [playerName, setPlayerName] = useState('');
   const [socket, setSocket] = useState(null);
   const [showRoomCode, setShowRoomCode] = useState(false);
   const [connectionError, setConnectionError] = useState('');
   const [callResult, setCallResult] = useState(null);
 
-  // Use your deployed backend URL or default to localhost
+  // Replace with your deployed backend URL or default to localhost for testing
   const backendURL = process.env.REACT_APP_BACKEND_URL || "http://localhost:8080";
 
-  // Use SVG images (your images are saved as SVG)
+  // Get card image URL from public/playing-cards (SVG images)
   const getCardImageURL = (card) => {
     if (!card) return null;
     const valueMap = { 1: "ace", 11: "jack", 12: "queen", 13: "king" };
@@ -29,14 +29,11 @@ const App = () => {
 
   useEffect(() => {
     if (!playerName || !roomCode || !gameStarted) return;
-
     const socketIO = io(backendURL, { transports: ['websocket'], query: { playerName, roomCode } });
-
     socketIO.on('connect', () => {
       console.log('Connected to backend');
       socketIO.emit('join_room', { room_id: roomCode, player_id: playerName });
     });
-
     socketIO.on('game_state', (data) => {
       console.log("Game state:", data);
       setPlayers(prev => {
@@ -48,7 +45,6 @@ const App = () => {
       setCurrentTurn(data.current_turn);
       setTableCards(data.table_cards || []);
     });
-
     socketIO.on('player_joined', (data) => {
       console.log(`${data.player_id} joined`);
       setPlayers(data.players.map(pid => ({
@@ -58,14 +54,12 @@ const App = () => {
         score: 0
       })));
     });
-
     socketIO.on('card_played', (data) => {
       console.log("Card played:", data);
       setTableCards(data.table_cards);
       setCurrentTurn(data.current_turn);
       setSelectedCards([]);
     });
-
     socketIO.on('hand_updated', (data) => {
       setPlayers(prev =>
         prev.map(player =>
@@ -73,7 +67,6 @@ const App = () => {
         )
       );
     });
-
     socketIO.on('card_drawn', (data) => {
       setPlayers(prev =>
         prev.map(player =>
@@ -81,21 +74,18 @@ const App = () => {
         )
       );
     });
-
     socketIO.on('call_result', (data) => {
       console.log("Call result:", data);
       setCallResult(data);
     });
-
     socketIO.on('error', (data) => {
       setConnectionError(data.message);
     });
-
     setSocket(socketIO);
     return () => socketIO.disconnect();
   }, [playerName, roomCode, gameStarted]);
 
-  // Toggle selection of a card (allows multiple selection if matching the top card)
+  // Toggle selection: allow multi-card selection if matching the top card (if any)
   const toggleCardSelection = (index) => {
     if (currentTurn !== playerName) return;
     const myHand = players.find(p => p.id === playerName)?.hand;
@@ -111,21 +101,13 @@ const App = () => {
 
   const handleCreateGame = () => {
     let newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-    if (newCode.length < 6) newCode = newCode.padEnd(6, 'A');
+    if(newCode.length < 6) newCode = newCode.padEnd(6, 'A');
     setRoomCode(newCode);
     setShowRoomCode(true);
     setGameStarted(true);
   };
 
   const handleJoinGame = () => {
-    setGameStarted(true);
-  };
-
-  const handleStartGame = () => {
-    if (!playerName.trim()) {
-      alert("Please enter your name");
-      return;
-    }
     setGameStarted(true);
   };
 
@@ -151,7 +133,6 @@ const App = () => {
     window.location.reload();
   };
 
-  // Setup Screen Component
   const SetupScreen = () => (
     <div className="setup-container">
       <h1 className="title">Fadu Card Game</h1>
@@ -188,25 +169,21 @@ const App = () => {
     </div>
   );
 
-  // Player Card Component
   const PlayerCard = ({ player, isCurrentPlayer }) => (
-    <Card className={clsx("player-card", isCurrentPlayer ? "bg-primary/10" : "bg-background")}>
-      <CardHeader>
-        <div className="player-header">
-          <div className="player-info">
-            <Users className="icon" />
-            <span>{player.name}</span>
-          </div>
-          <div className="player-score">
-            <Trophy className="icon" />
-            <span>{player.score || 0}</span>
-          </div>
+    <div className="player-card">
+      <div className="player-header">
+        <div className="player-info">
+          <Users className="icon" />
+          <span>{player.name}</span>
         </div>
-      </CardHeader>
-    </Card>
+        <div className="player-score">
+          <Trophy className="icon" />
+          <span>{player.score || 0}</span>
+        </div>
+      </div>
+    </div>
   );
 
-  // Main Game Board Component
   const GameBoard = () => (
     <div className="game-board">
       <div className="header">
@@ -241,7 +218,7 @@ const App = () => {
           {players.find(p => p.id === playerName)?.hand.map((card, index) => (
             <div key={index}
               onClick={() => currentTurn === playerName && toggleCardSelection(index)}
-              className={clsx("card", selectedCards.includes(index) && "selected")}
+              className={`card ${selectedCards.includes(index) ? "selected" : ""}`}
             >
               <img src={getCardImageURL(card)}
                 alt={`${card.value} of ${card.suit}`}

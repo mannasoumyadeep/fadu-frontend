@@ -3,8 +3,8 @@ body, html {
   margin: 0;
   padding: 0;
   font-family: 'Arial', sans-serif;
-  background: #1f2937; /* Darker background for contrast */
-  color: #e5e7eb;      /* Light gray text */
+  background: #1f2937;
+  color: #e5e7eb;
 }
 
 .app-container {
@@ -67,7 +67,7 @@ input[type="text"] {
   margin-top: 10px;
 }
 
-/* Game Screen */
+/* Game Board */
 .game-board {
   background: #374151;
   border-radius: 8px;
@@ -94,6 +94,8 @@ input[type="text"] {
   background: #f9fafb;
   color: #1f2937;
   border: 2px solid #f9fafb;
+  padding: 10px;
+  border-radius: 4px;
 }
 
 .player-header {
@@ -167,4 +169,13 @@ input[type="text"] {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
+}
+
+/* Additional layout for sections */
+.setup-container, .game-board {
+  margin-bottom: 20px;
+}
+
+.players-section, .table-section, .hand-section {
+  margin-bottom: 20px;
 }
