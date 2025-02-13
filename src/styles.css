@@ -141,3 +141,15 @@ input[type="text"] {
   text-align: left;
 }
 
+.base-class {
+  padding: 20px;
+  background-color: lightgray;
+  border: 1px solid #ccc;
+  font-size: 1.2rem;
+}
+
+.active-class {
+  background-color: lightgreen;
+  border-color: green;
+}
+

@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import clsx from 'clsx';
 import { io } from 'socket.io-client';
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Trophy, Users, RefreshCcw, HandMetal } from "lucide-react";
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Trophy, Users, RefreshCcw, HandMetal } from 'lucide-react';
 
 const App = () => {
   const [roomCode, setRoomCode] = useState('');
@@ -23,6 +24,7 @@ const App = () => {
 
   const backendURL = process.env.REACT_APP_BACKEND_URL || "http://localhost:8080";
 
+  // Helper function to get card image URL
   const getCardImageURL = (card) => {
     if (!card) return null;
     const valueMap = { 1: "ace", 11: "jack", 12: "queen", 13: "king" };
@@ -95,6 +97,7 @@ const App = () => {
     return () => socketIO.disconnect();
   }, [playerName, roomCode, gameStarted]);
 
+  // Setup Screen Component
   const SetupScreen = () => (
     <Card className="w-full max-w-md mx-auto mt-8">
       <CardHeader className="text-center">
@@ -108,20 +111,31 @@ const App = () => {
           onChange={e => setPlayerName(e.target.value)}
         />
         <div className="flex gap-2">
-          <Button onClick={() => setIsCreatingGame(true)} variant={isCreatingGame ? "default" : "outline"} className="flex-1">
+          <Button 
+            onClick={() => setIsCreatingGame(true)} 
+            variant={isCreatingGame ? "default" : "outline"} 
+            className="flex-1"
+          >
             Create Room
           </Button>
-          <Button onClick={() => setIsCreatingGame(false)} variant={!isCreatingGame ? "default" : "outline"} className="flex-1">
+          <Button 
+            onClick={() => setIsCreatingGame(false)} 
+            variant={!isCreatingGame ? "default" : "outline"} 
+            className="flex-1"
+          >
             Join Room
           </Button>
         </div>
         {isCreatingGame ? (
-          <Button onClick={() => {
-            const newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-            setRoomCode(newCode);
-            setShowRoomCode(true);
-            setGameStarted(true);
-          }} className="w-full">
+          <Button
+            onClick={() => {
+              const newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+              setRoomCode(newCode);
+              setShowRoomCode(true);
+              setGameStarted(true);
+            }}
+            className="w-full"
+          >
             Create New Room
           </Button>
         ) : (
@@ -154,8 +168,9 @@ const App = () => {
     </Card>
   );
 
+  // Player Card Component
   const PlayerCard = ({ player, isCurrentPlayer }) => (
-    <Card className={`w-full ${isCurrentPlayer ? 'bg-primary/10' : 'bg-background'}`}>
+    <Card className={clsx("w-full", isCurrentPlayer ? "bg-primary/10" : "bg-background")}>
       <CardHeader className="p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -171,6 +186,7 @@ const App = () => {
     </Card>
   );
 
+  // Main Game Board Component
   const GameBoard = () => (
     <div className="space-y-8">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -178,7 +194,11 @@ const App = () => {
           <h3 className="text-lg font-semibold">Players</h3>
           <div className="grid gap-2">
             {players.map(player => (
-              <PlayerCard key={player.id} player={player} isCurrentPlayer={currentTurn === player.id} />
+              <PlayerCard
+                key={player.id}
+                player={player}
+                isCurrentPlayer={currentTurn === player.id}
+              />
             ))}
           </div>
         </div>
@@ -188,11 +208,19 @@ const App = () => {
           </CardHeader>
           <CardContent className="p-4">
             <div className="flex flex-wrap gap-2">
-              {tableCards.length > 0 ? tableCards.map((card, index) => (
-                <div key={index} className="relative w-24 h-32">
-                  <img src={getCardImageURL(card)} alt={`${card.value} of ${card.suit}`} className="w-full h-full object-contain" />
-                </div>
-              )) : <p>No cards played yet.</p>}
+              {tableCards.length > 0 ? (
+                tableCards.map((card, index) => (
+                  <div key={index} className="relative w-24 h-32">
+                    <img
+                      src={getCardImageURL(card)}
+                      alt={`${card.value} of ${card.suit}`}
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                ))
+              ) : (
+                <p>No cards played yet.</p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -204,23 +232,44 @@ const App = () => {
         <CardContent className="p-4">
           <div className="flex flex-wrap gap-2 justify-center">
             {players.find(p => p.id === playerName)?.hand.map((card, index) => (
-              <div key={index}
+              <div
+                key={index}
                 onClick={() => currentTurn === playerName && setSelectedCard(index)}
-                className={`relative w-24 h-32 transition-transform hover:scale-110 cursor-pointer ${selectedCard === index ? 'ring-2 ring-primary' : ''}`}>
-                <img src={getCardImageURL(card)} alt={`${card.value} of ${card.suit}`} className="w-full h-full object-contain" />
+                className={clsx(
+                  "relative w-24 h-32 transition-transform hover:scale-110 cursor-pointer",
+                  selectedCard === index && "ring-2 ring-primary"
+                )}
+              >
+                <img
+                  src={getCardImageURL(card)}
+                  alt={`${card.value} of ${card.suit}`}
+                  className="w-full h-full object-contain"
+                />
               </div>
             ))}
           </div>
           <div className="flex justify-center gap-4 mt-6">
-            <Button onClick={() => socket?.emit('draw_card', { player_id: playerName })} disabled={currentTurn !== playerName}>
+            <Button
+              onClick={() => socket?.emit('draw_card', { player_id: playerName })}
+              disabled={currentTurn !== playerName}
+            >
               <RefreshCcw className="mr-2 h-4 w-4" /> Draw Card
             </Button>
-            <Button onClick={() => selectedCard !== null && socket?.emit('play_card', { player_id: playerName, card_index: selectedCard })}
-              disabled={currentTurn !== playerName || selectedCard === null} variant="secondary">
+            <Button
+              onClick={() =>
+                selectedCard !== null &&
+                socket?.emit('play_card', { player_id: playerName, card_index: selectedCard })
+              }
+              disabled={currentTurn !== playerName || selectedCard === null}
+              variant="secondary"
+            >
               Play Selected Card
             </Button>
-            <Button onClick={() => socket?.emit('call', { player_id: playerName })}
-              disabled={currentTurn !== playerName} variant="destructive">
+            <Button
+              onClick={() => socket?.emit('call', { player_id: playerName })}
+              disabled={currentTurn !== playerName}
+              variant="destructive"
+            >
               <HandMetal className="mr-2 h-4 w-4" /> Call
             </Button>
           </div>
@@ -230,7 +279,9 @@ const App = () => {
         <Alert>
           <AlertDescription>
             <div className="space-y-2">
-              <h4 className="font-semibold">Call Result: {callResult.result === "win" ? "You Won!" : "You Lost"}</h4>
+              <h4 className="font-semibold">
+                Call Result: {callResult.result === "win" ? "You Won!" : "You Lost"}
+              </h4>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <h5 className="font-medium">Hand Totals:</h5>
