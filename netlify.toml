@@ -1,0 +1,12 @@
+[build]
+  command = "CI=false npm run build"
+  publish = "build"
+
+[build.environment]
+  NODE_VERSION = "18.20.6"
+  NPM_VERSION = "10.8.2"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
