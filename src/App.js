@@ -21,14 +21,18 @@ function App() {
     callResult: null,
     gameStatus: 'waiting',
     isHost: false,
-    deckCount: 52
+    deckCount: 52,
   });
 
   const backendURL = process.env.REACT_APP_BACKEND_URL || "http://localhost:8080";
 
-  const updateGameState = useCallback((updates) => {
-    setGameState(prev => (typeof updates === 'function' ? updates(prev) : { ...prev, ...updates }));
-  }, []);
+  const updateGameState = useCallback(
+    (updates) =>
+      setGameState((prev) =>
+        typeof updates === 'function' ? updates(prev) : { ...prev, ...updates }
+      ),
+    []
+  );
 
   const getCardImageURL = useCallback((card) => {
     if (!card) return null;
@@ -42,91 +46,89 @@ function App() {
 
     const socket = io(backendURL, {
       transports: ['websocket'],
-      query: { playerName: gameState.playerName, roomCode: gameState.roomCode }
+      query: { playerName: gameState.playerName, roomCode: gameState.roomCode },
     });
 
     socket.on('connect', () => {
       socket.emit('join_room', {
         room_id: gameState.roomCode,
         player_id: gameState.playerName,
-        is_host: gameState.isCreatingGame
+        is_host: gameState.isCreatingGame,
       });
     });
 
     const socketEvents = {
-      'game_state': (data) => {
-        updateGameState(prev => ({
+      game_state: (data) => {
+        updateGameState((prev) => ({
           ...prev,
-          players: prev.players.find(p => p.id === prev.playerName)
+          players: prev.players.find((p) => p.id === prev.playerName)
             ? prev.players
-            : [...prev.players, {
-                id: prev.playerName,
-                name: prev.playerName,
-                hand: data.hand,
-                score: 0,
-                isHost: data.is_host
-              }],
+            : [
+                ...prev.players,
+                {
+                  id: prev.playerName,
+                  name: prev.playerName,
+                  hand: data.hand,
+                  score: 0,
+                  isHost: data.is_host,
+                },
+              ],
           currentTurn: data.current_turn,
           tableCards: data.table_cards || [],
           deckCount: data.deck_count,
           gameStatus: 'playing',
-          isHost: data.is_host
+          isHost: data.is_host,
         }));
       },
-
-      'player_joined': (data) => {
-        updateGameState(prev => ({
+      player_joined: (data) => {
+        updateGameState((prev) => ({
           ...prev,
-          players: data.players.map(pid => ({
+          players: data.players.map((pid) => ({
             id: pid,
             name: pid,
-            hand: pid === prev.playerName ? prev.players.find(p => p.id === prev.playerName)?.hand || [] : [],
+            hand:
+              pid === prev.playerName
+                ? prev.players.find((p) => p.id === prev.playerName)?.hand || []
+                : [],
             score: 0,
-            isHost: data.host_id === pid
-          }))
+            isHost: data.host_id === pid,
+          })),
         }));
       },
-
-      'cards_played': (data) => {
+      cards_played: (data) => {
         updateGameState({
           tableCards: data.table_cards,
           currentTurn: data.current_turn,
           selectedCards: new Set(),
-          deckCount: data.deck_count
+          deckCount: data.deck_count,
         });
       },
-
-      'hand_updated': (data) => {
-        updateGameState(prev => ({
+      hand_updated: (data) => {
+        updateGameState((prev) => ({
           ...prev,
-          players: prev.players.map(player =>
-            player.id === prev.playerName
-              ? { ...player, hand: data.hand }
-              : player
+          players: prev.players.map((player) =>
+            player.id === prev.playerName ? { ...player, hand: data.hand } : player
           ),
-          deckCount: data.deck_count
+          deckCount: data.deck_count,
         }));
       },
-
-      'call_result': (data) => {
+      call_result: (data) => {
         updateGameState({
           callResult: data,
-          gameStatus: 'ended'
+          gameStatus: 'ended',
         });
       },
-
-      'game_started': (data) => {
+      game_started: (data) => {
         updateGameState({
           gameStatus: 'playing',
           players: data.players,
           currentTurn: data.current_turn,
-          deckCount: data.deck_count
+          deckCount: data.deck_count,
         });
       },
-
-      'error': (data) => {
+      error: (data) => {
         updateGameState({ connectionError: data.message });
-      }
+      },
     };
 
     Object.entries(socketEvents).forEach(([event, handler]) => {
@@ -134,33 +136,44 @@ function App() {
     });
 
     updateGameState({ socket });
+
     return () => socket.disconnect();
-  }, [gameState.playerName, gameState.roomCode, gameState.gameStarted, backendURL, updateGameState]);
+  }, [
+    gameState.playerName,
+    gameState.roomCode,
+    gameState.gameStarted,
+    gameState.isCreatingGame, // Added to fix ESLint warning
+    backendURL,
+    updateGameState,
+  ]);
 
-  const handleCardSelect = useCallback((index) => {
-    if (gameState.currentTurn !== gameState.playerName) return;
+  const handleCardSelect = useCallback(
+    (index) => {
+      if (gameState.currentTurn !== gameState.playerName) return;
 
-    setGameState(prev => {
-      const newSelected = new Set(prev.selectedCards);
-      const playerHand = prev.players.find(p => p.id === prev.playerName)?.hand || [];
-      const selectedCard = playerHand[index];
+      setGameState((prev) => {
+        const newSelected = new Set(prev.selectedCards);
+        const playerHand = prev.players.find((p) => p.id === prev.playerName)?.hand || [];
+        const selectedCard = playerHand[index];
 
-      if (prev.selectedCards.size === 0) {
-        newSelected.add(index);
-      } else {
-        const firstSelectedCard = playerHand[Array.from(prev.selectedCards)[0]];
-        if (selectedCard.value === firstSelectedCard.value) {
-          if (newSelected.has(index)) {
-            newSelected.delete(index);
-          } else {
-            newSelected.add(index);
+        if (prev.selectedCards.size === 0) {
+          newSelected.add(index);
+        } else {
+          const firstSelectedCard = playerHand[Array.from(prev.selectedCards)[0]];
+          if (selectedCard.value === firstSelectedCard.value) {
+            if (newSelected.has(index)) {
+              newSelected.delete(index);
+            } else {
+              newSelected.add(index);
+            }
           }
         }
-      }
 
-      return { ...prev, selectedCards: newSelected };
-    });
-  }, [gameState.currentTurn, gameState.playerName]);
+        return { ...prev, selectedCards: newSelected };
+      });
+    },
+    [gameState.currentTurn, gameState.playerName]
+  );
 
   const gameActions = {
     playCards: () => {
@@ -168,39 +181,32 @@ function App() {
       if (socket && currentTurn === playerName && selectedCards.size > 0) {
         socket.emit('play_cards', {
           player_id: playerName,
-          card_indices: Array.from(selectedCards).sort((a, b) => b - a)
+          card_indices: Array.from(selectedCards).sort((a, b) => b - a),
         });
       }
     },
-
     drawCard: () => {
       const { socket, playerName } = gameState;
       if (socket) {
         socket.emit('draw_card', { player_id: playerName });
       }
     },
-
     callGame: () => {
       const { socket, playerName } = gameState;
       if (socket) {
         socket.emit('call', { player_id: playerName });
       }
     },
-
     startGame: () => {
       const { socket, isHost, roomCode } = gameState;
       if (socket && isHost) {
         socket.emit('start_game', { room_id: roomCode });
       }
-    }
+    },
   };
 
   const PlayerCard = ({ player, isCurrentPlayer }) => (
-    <Card className={cn(
-      "w-full",
-      isCurrentPlayer ? "bg-primary/10" : "bg-background",
-      "shadow-md"
-    )}>
+    <Card className={cn("w-full", isCurrentPlayer ? "bg-primary/10" : "bg-background", "shadow-md")}>
       <CardHeader className="p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -238,12 +244,8 @@ function App() {
             <span className="text-sm">{gameState.players.length}/4 Players</span>
           </div>
           <div className="grid gap-2">
-            {gameState.players.map(player => (
-              <PlayerCard
-                key={player.id}
-                player={player}
-                isCurrentPlayer={gameState.currentTurn === player.id}
-              />
+            {gameState.players.map((player) => (
+              <PlayerCard key={player.id} player={player} isCurrentPlayer={gameState.currentTurn === player.id} />
             ))}
           </div>
         </div>
@@ -283,7 +285,7 @@ function App() {
         </CardHeader>
         <CardContent className="p-4">
           <div className="flex flex-wrap gap-2 justify-center">
-            {gameState.players.find(p => p.id === gameState.playerName)?.hand.map((card, index) => (
+            {gameState.players.find((p) => p.id === gameState.playerName)?.hand.map((card, index) => (
               <div
                 key={index}
                 onClick={() => handleCardSelect(index)}
@@ -314,13 +316,11 @@ function App() {
 
             <Button
               onClick={gameActions.playCards}
-              disabled={
-                gameState.currentTurn !== gameState.playerName ||
-                gameState.selectedCards.size === 0
-              }
+              disabled={gameState.currentTurn !== gameState.playerName || gameState.selectedCards.size === 0}
             >
               <Play className="mr-2 h-4 w-4" />
-              Play {gameState.selectedCards.size} Card{gameState.selectedCards.size !== 1 ? 's' : ''}
+              Play {gameState.selectedCards.size} Card
+              {gameState.selectedCards.size !== 1 && 's'}
             </Button>
 
             <Button
@@ -379,10 +379,10 @@ function App() {
           type="text"
           placeholder="Enter your name"
           value={gameState.playerName}
-          onChange={e => updateGameState({ playerName: e.target.value })}
+          onChange={(e) => updateGameState({ playerName: e.target.value })}
           className="w-full px-3 py-2 rounded border bg-background text-foreground"
         />
-        
+
         <div className="flex gap-2">
           <Button
             onClick={() => updateGameState({ isCreatingGame: true })}
@@ -410,7 +410,7 @@ function App() {
                 roomCode: newCode,
                 showRoomCode: true,
                 gameStarted: true,
-                isHost: true
+                isHost: true,
               });
             }}
             className="w-full"
@@ -423,13 +423,10 @@ function App() {
               type="text"
               placeholder="Enter room code"
               value={gameState.roomCode}
-              onChange={e => updateGameState({ roomCode: e.target.value.toUpperCase() })}
+              onChange={(e) => updateGameState({ roomCode: e.target.value.toUpperCase() })}
               className="w-full px-3 py-2 rounded border bg-background text-foreground"
             />
-            <Button
-              onClick={() => updateGameState({ gameStarted: true })}
-              className="w-full"
-            >
+            <Button onClick={() => updateGameState({ gameStarted: true })} className="w-full">
               Join Room
             </Button>
           </>
