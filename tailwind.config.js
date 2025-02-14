@@ -1,16 +1,25 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   darkMode: ["class"],
+<<<<<<< HEAD
   content: [
     "./src/**/*.{js,jsx,ts,tsx}",
   ],
+=======
+  content: ["./src/**/*.{js,jsx}"],
+>>>>>>> 126311a226d8285876475ba0d14da72eb156fb72
   theme: {
     container: {
       center: true,
       padding: "2rem",
       screens: {
+<<<<<<< HEAD
         "2xl": "1400px",
       },
+=======
+        "2xl": "1400px"
+      }
+>>>>>>> 126311a226d8285876475ba0d14da72eb156fb72
     },
     extend: {
       colors: {
@@ -21,6 +30,7 @@ module.exports = {
         foreground: "hsl(var(--foreground))",
         primary: {
           DEFAULT: "hsl(var(--primary))",
+<<<<<<< HEAD
           foreground: "hsl(var(--primary-foreground))",
         },
         secondary: {
@@ -47,15 +57,48 @@ module.exports = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+=======
+          foreground: "hsl(var(--primary-foreground))"
+        },
+        secondary: {
+          DEFAULT: "hsl(var(--secondary))",
+          foreground: "hsl(var(--secondary-foreground))"
+        },
+        destructive: {
+          DEFAULT: "hsl(var(--destructive))",
+          foreground: "hsl(var(--destructive-foreground))"
+        },
+        muted: {
+          DEFAULT: "hsl(var(--muted))",
+          foreground: "hsl(var(--muted-foreground))"
+        },
+        accent: {
+          DEFAULT: "hsl(var(--accent))",
+          foreground: "hsl(var(--accent-foreground))"
+        },
+        popover: {
+          DEFAULT: "hsl(var(--popover))",
+          foreground: "hsl(var(--popover-foreground))"
+        },
+        card: {
+          DEFAULT: "hsl(var(--card))",
+          foreground: "hsl(var(--card-foreground))"
+        }
+>>>>>>> 126311a226d8285876475ba0d14da72eb156fb72
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
+<<<<<<< HEAD
         sm: "calc(var(--radius) - 4px)",
+=======
+        sm: "calc(var(--radius) - 4px)"
+>>>>>>> 126311a226d8285876475ba0d14da72eb156fb72
       },
       keyframes: {
         "accordion-down": {
           from: { height: 0 },
+<<<<<<< HEAD
           to: { height: "var(--radix-accordion-content-height)" },
         },
         "accordion-up": {
@@ -106,3 +149,20 @@ module.exports = {
     require("tailwindcss-animate"),
   ],
 }
+=======
+          to: { height: "var(--radix-accordion-content-height)" }
+        },
+        "accordion-up": {
+          from: { height: "var(--radix-accordion-content-height)" },
+          to: { height: 0 }
+        }
+      },
+      animation: {
+        "accordion-down": "accordion-down 0.2s ease-out",
+        "accordion-up": "accordion-up 0.2s ease-out"
+      }
+    }
+  },
+  plugins: [require("tailwindcss-animate")]
+}
+>>>>>>> 126311a226d8285876475ba0d14da72eb156fb72

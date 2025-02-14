@@ -2,6 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
+<<<<<<< HEAD
+=======
+/* Global CSS variables for theming */
+>>>>>>> 126311a226d8285876475ba0d14da72eb156fb72
 @layer base {
   :root {
     --background: 224 71% 4%;
@@ -25,6 +29,7 @@
     --ring: 213 31% 91%;
     --radius: 0.5rem;
   }
+<<<<<<< HEAD
 }
 
 .playing-card {
@@ -50,3 +55,11 @@ body {
   -moz-osx-font-smoothing: grayscale;
   @apply bg-background text-foreground;
 }
+=======
+  
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+>>>>>>> 126311a226d8285876475ba0d14da72eb156fb72
