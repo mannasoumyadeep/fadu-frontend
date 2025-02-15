@@ -7,38 +7,33 @@ import { cn } from './lib/utils';
 
 function App() {
   const [gameState, setGameState] = useState({
+    playerName: '',
     roomCode: '',
     isCreatingGame: true,
-    gameStarted: false,
+    isHost: false,
+    socket: null,
+    connectionError: '',
     players: [],
     currentTurn: null,
     tableCards: [],
-    selectedCards: new Set(),
-    playerName: '',
-    socket: null,
-    showRoomCode: false,
-    connectionError: '',
-    callResult: null,
-    gameStatus: 'waiting',
-    isHost: false,
     deckCount: 52,
-    totalRounds: 1,
     currentRound: 1,
+    totalRounds: 1,
+    gameStatus: 'waiting', // "waiting", "playing", "ended", or "final"
+    selectedCards: new Set(),
+    callResult: null,
     finalResults: null,
   });
 
-  // Change this to your actual backend URL or set it in Netlify as REACT_APP_BACKEND_URL
+  // Use your actual backend domain or environment variable
   const backendURL = process.env.REACT_APP_BACKEND_URL || "http://localhost:8080";
 
-  const updateGameState = useCallback(
-    (updates) =>
-      setGameState((prev) =>
-        typeof updates === 'function' ? updates(prev) : { ...prev, ...updates }
-      ),
-    []
-  );
+  const updateGameState = useCallback((updates) => {
+    setGameState((prev) =>
+      typeof updates === 'function' ? updates(prev) : { ...prev, ...updates }
+    );
+  }, []);
 
-  // Convert a card object {suit, value} into an image path
   const getCardImageURL = useCallback((card) => {
     if (!card) return null;
     const valueMap = { 1: "ace", 11: "jack", 12: "queen", 13: "king" };
@@ -46,56 +41,43 @@ function App() {
     return `/playing-cards/${valueStr}_of_${card.suit.toLowerCase()}.png`;
   }, []);
 
-  // Socket setup
+  // We'll connect the socket only after user finalizes "Create Room" or "Join Room"
+  // So we don't connect automatically on load.
+
+  // We'll store whether we have "joined" in a local boolean.
+  const [hasJoinedRoom, setHasJoinedRoom] = useState(false);
+
   useEffect(() => {
-    // Only connect after we have playerName, roomCode, and gameStarted = true
-    if (!gameState.playerName || !gameState.roomCode || !gameState.gameStarted) return;
+    if (!hasJoinedRoom || !gameState.playerName || !gameState.roomCode) return;
 
-    const socket = io(backendURL, {
-      transports: ['websocket'],
-      query: {
-        playerName: gameState.playerName,
-        roomCode: gameState.roomCode,
-      },
-    });
-
+    const socket = io(backendURL, { transports: ['websocket'] });
     socket.on('connect', () => {
+      // Actually join the room
       socket.emit('join_room', {
         room_id: gameState.roomCode,
         player_id: gameState.playerName,
-        is_host: gameState.isCreatingGame,
+        is_host: gameState.isHost,
       });
     });
 
-    // Define all socket event handlers
     const socketEvents = {
       game_state: (data) => {
-        updateGameState((prev) => ({
-          ...prev,
-          players: prev.players.find((p) => p.id === prev.playerName)
-            ? prev.players
-            : [
-                ...prev.players,
-                {
-                  id: prev.playerName,
-                  name: prev.playerName,
-                  hand: data.hand,
-                  score: 0,
-                  isHost: data.is_host,
-                },
-              ],
-          currentTurn: data.current_turn,
+        updateGameState({
+          players: data.players || [],
           tableCards: data.table_cards || [],
+          currentTurn: data.current_turn,
           deckCount: data.deck_count,
           gameStatus: data.game_status || 'waiting',
-          isHost: data.is_host,
           currentRound: data.current_round || 1,
-        }));
+        });
       },
       player_joined: (data) => {
+        // data.players is the full list of player IDs
+        // host_id is the ID of the host
         updateGameState((prev) => ({
           ...prev,
           players: data.players.map((pid) => {
+            // keep old info if we had it
             const existing = prev.players.find((p) => p.id === pid);
             return {
               id: pid,
@@ -120,17 +102,15 @@ function App() {
         updateGameState({
           tableCards: data.table_cards,
           currentTurn: data.current_turn,
-          selectedCards: new Set(),
           deckCount: data.deck_count,
+          selectedCards: new Set(),
         });
       },
       hand_updated: (data) => {
         updateGameState((prev) => ({
           ...prev,
-          players: prev.players.map((player) =>
-            player.id === prev.playerName
-              ? { ...player, hand: data.hand }
-              : player
+          players: prev.players.map((p) =>
+            p.id === gameState.playerName ? { ...p, hand: data.hand } : p
           ),
           deckCount: data.deck_count,
         }));
@@ -142,7 +122,7 @@ function App() {
         });
       },
       round_won: (data) => {
-        alert(`Player ${data.player_id} emptied their hand and got +4 points!`);
+        alert(`Player ${data.player_id} emptied their hand (+4 points)!`);
       },
       next_round: (data) => {
         updateGameState({
@@ -162,59 +142,27 @@ function App() {
           gameStatus: 'final',
         });
       },
-      error: (data) => {
-        updateGameState({ connectionError: data.message });
+      error: (err) => {
+        updateGameState({ connectionError: err.message });
       },
     };
 
-    // Register socket events
-    for (const [event, handler] of Object.entries(socketEvents)) {
-      socket.on(event, handler);
-    }
+    Object.entries(socketEvents).forEach(([evt, handler]) => {
+      socket.on(evt, handler);
+    });
 
     updateGameState({ socket });
 
-    // Cleanup on unmount
     return () => socket.disconnect();
-  }, [
-    gameState.playerName,
-    gameState.roomCode,
-    gameState.gameStarted,
-    gameState.isCreatingGame,
-    backendURL,
-    updateGameState,
-  ]);
+  }, [hasJoinedRoom, gameState.playerName, gameState.roomCode, gameState.isHost, backendURL, updateGameState]);
 
-  // Handle selecting cards in the hand
-  const handleCardSelect = useCallback(
-    (index) => {
-      if (gameState.currentTurn !== gameState.playerName) return;
-      setGameState((prev) => {
-        const newSelected = new Set(prev.selectedCards);
-        const myHand = prev.players.find((p) => p.id === prev.playerName)?.hand || [];
-        const clickedCard = myHand[index];
-
-        if (prev.selectedCards.size === 0) {
-          newSelected.add(index);
-        } else {
-          // Only allow selecting more if same value
-          const firstSelectedCard = myHand[Array.from(prev.selectedCards)[0]];
-          if (clickedCard.value === firstSelectedCard.value) {
-            if (newSelected.has(index)) {
-              newSelected.delete(index);
-            } else {
-              newSelected.add(index);
-            }
-          }
-        }
-        return { ...prev, selectedCards: newSelected };
-      });
-    },
-    [gameState.currentTurn, gameState.playerName, gameState.players]
-  );
-
-  // Actions that emit socket events
+  // Action methods
   const gameActions = {
+    doJoinRoom: () => {
+      // Called after user typed name & code, decides if host or not
+      if (!gameState.playerName || !gameState.roomCode) return;
+      setHasJoinedRoom(true);
+    },
     startGame: () => {
       const { socket, isHost, roomCode, totalRounds, players } = gameState;
       if (socket && isHost && players.length >= 2) {
@@ -222,6 +170,12 @@ function App() {
           room_id: roomCode,
           total_rounds: totalRounds,
         });
+      }
+    },
+    drawCard: () => {
+      const { socket, playerName } = gameState;
+      if (socket) {
+        socket.emit('draw_card', { player_id: playerName });
       }
     },
     playCards: () => {
@@ -233,12 +187,6 @@ function App() {
         });
       }
     },
-    drawCard: () => {
-      const { socket, playerName } = gameState;
-      if (socket) {
-        socket.emit('draw_card', { player_id: playerName });
-      }
-    },
     callGame: () => {
       const { socket, playerName } = gameState;
       if (socket) {
@@ -247,10 +195,128 @@ function App() {
     },
   };
 
-  // Board / UI
+  const handleCardSelect = useCallback(
+    (index) => {
+      if (gameState.currentTurn !== gameState.playerName) return;
+      const myPlayer = gameState.players.find((p) => p.id === gameState.playerName);
+      if (!myPlayer) return;
+      const newSelected = new Set(gameState.selectedCards);
+      const clickedCard = myPlayer.hand[index];
+      if (newSelected.size === 0) {
+        newSelected.add(index);
+      } else {
+        // only allow multiple if same value
+        const firstIndex = [...newSelected][0];
+        const firstCard = myPlayer.hand[firstIndex];
+        if (clickedCard.value === firstCard.value) {
+          if (newSelected.has(index)) {
+            newSelected.delete(index);
+          } else {
+            newSelected.add(index);
+          }
+        }
+      }
+      updateGameState({ selectedCards: newSelected });
+    },
+    [gameState, updateGameState]
+  );
+
+  // Render components
+
+  const SetupScreen = () => (
+    <Card className="w-full max-w-md mx-auto mt-8">
+      <CardHeader className="text-center">
+        <h1 className="text-2xl font-bold">Fadu Card Game</h1>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <input
+          type="text"
+          placeholder="Enter your name"
+          value={gameState.playerName}
+          onChange={(e) => updateGameState({ playerName: e.target.value })}
+          className="w-full px-3 py-2 rounded border"
+        />
+        <div className="flex gap-2">
+          <Button
+            onClick={() => updateGameState({
+              isCreatingGame: true,
+              isHost: true,
+            })}
+            variant={gameState.isCreatingGame ? "default" : "outline"}
+            className="flex-1"
+          >
+            <Trophy className="mr-2 h-4 w-4" />
+            Create Room
+          </Button>
+          <Button
+            onClick={() => updateGameState({
+              isCreatingGame: false,
+              isHost: false,
+            })}
+            variant={!gameState.isCreatingGame ? "default" : "outline"}
+            className="flex-1"
+          >
+            <Users className="mr-2 h-4 w-4" />
+            Join Room
+          </Button>
+        </div>
+        {gameState.isCreatingGame ? (
+          <>
+            <input
+              type="number"
+              placeholder="Number of Rounds"
+              value={gameState.totalRounds}
+              onChange={(e) => updateGameState({ totalRounds: +e.target.value })}
+              className="w-full px-3 py-2 rounded border"
+              min={1}
+            />
+            <Button
+              onClick={() => {
+                // Generate a random code
+                const newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+                updateGameState({
+                  roomCode: newCode,
+                  // We do NOT set gameStatus to "playing" or anything yet
+                });
+                // Actually connect to the room
+                gameActions.doJoinRoom();
+              }}
+              className="w-full"
+            >
+              Create Room
+            </Button>
+          </>
+        ) : (
+          <>
+            <input
+              type="text"
+              placeholder="Enter room code"
+              value={gameState.roomCode}
+              onChange={(e) => updateGameState({ roomCode: e.target.value.toUpperCase() })}
+              className="w-full px-3 py-2 rounded border"
+            />
+            <Button
+              onClick={() => {
+                gameActions.doJoinRoom();
+              }}
+              className="w-full"
+            >
+              Join Room
+            </Button>
+          </>
+        )}
+        {gameState.connectionError && (
+          <Card className="bg-destructive">
+            <CardContent className="p-4 text-destructive-foreground">
+              {gameState.connectionError}
+            </CardContent>
+          </Card>
+        )}
+      </CardContent>
+    </Card>
+  );
 
   const GameBoard = () => {
-    // If gameStatus is "final", show final results
     if (gameState.gameStatus === 'final' && gameState.finalResults) {
       const { scores, winners } = gameState.finalResults;
       return (
@@ -261,9 +327,7 @@ function App() {
           <CardContent>
             <ul>
               {Object.entries(scores).map(([pid, sc]) => (
-                <li key={pid}>
-                  {pid}: {sc} points
-                </li>
+                <li key={pid}>{pid}: {sc} points</li>
               ))}
             </ul>
             <p>Winner(s): {winners.join(', ')}</p>
@@ -289,15 +353,11 @@ function App() {
             </Button>
           )}
         </div>
-
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Players List */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold">Players</h3>
-              <span className="text-sm">
-                {gameState.players.length}/{4} Players
-              </span>
+              <span className="text-sm">{gameState.players.length}/4 Players</span>
             </div>
             <div className="grid gap-2">
               {gameState.players.map((pl) => (
@@ -323,8 +383,6 @@ function App() {
               ))}
             </div>
           </div>
-
-          {/* Table Cards */}
           <Card className="h-full">
             <CardHeader className="p-4">
               <h3 className="text-lg font-semibold">Table Cards</h3>
@@ -348,8 +406,6 @@ function App() {
             </CardContent>
           </Card>
         </div>
-
-        {/* Your Hand */}
         {gameState.gameStatus !== 'waiting' && (
           <Card className="mt-8">
             <CardHeader className="p-4">
@@ -362,27 +418,24 @@ function App() {
             </CardHeader>
             <CardContent className="p-4">
               <div className="flex flex-wrap gap-2 justify-center">
-                {gameState.players
-                  .find((p) => p.id === gameState.playerName)
-                  ?.hand.map((card, idx) => (
-                    <div
-                      key={idx}
-                      onClick={() => handleCardSelect(idx)}
-                      className={cn(
-                        "playing-card",
-                        gameState.selectedCards.has(idx) && "selected",
-                        gameState.currentTurn === gameState.playerName ? "" : "disabled"
-                      )}
-                    >
-                      <img
-                        src={getCardImageURL(card)}
-                        alt={`${card.value} of ${card.suit}`}
-                        className="w-full h-full object-contain"
-                      />
-                    </div>
-                  ))}
+                {gameState.players.find((p) => p.id === gameState.playerName)?.hand.map((card, i) => (
+                  <div
+                    key={i}
+                    onClick={() => handleCardSelect(i)}
+                    className={cn(
+                      "playing-card",
+                      gameState.selectedCards.has(i) && "selected",
+                      gameState.currentTurn === gameState.playerName ? "" : "disabled"
+                    )}
+                  >
+                    <img
+                      src={getCardImageURL(card)}
+                      alt={`${card.value} of ${card.suit}`}
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                ))}
               </div>
-
               <div className="flex justify-center gap-4 mt-6">
                 <Button
                   onClick={gameActions.drawCard}
@@ -418,8 +471,6 @@ function App() {
             </CardContent>
           </Card>
         )}
-
-        {/* Call Result (if any) */}
         {gameState.callResult && (
           <Card className="mt-4">
             <CardContent className="p-4">
@@ -455,105 +506,10 @@ function App() {
     );
   };
 
-  const SetupScreen = () => (
-    <Card className="w-full max-w-md mx-auto mt-8">
-      <CardHeader className="text-center">
-        <h1 className="text-2xl font-bold">Fadu Card Game</h1>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <input
-          type="text"
-          placeholder="Enter your name"
-          value={gameState.playerName}
-          onChange={(e) => updateGameState({ playerName: e.target.value })}
-          className="w-full px-3 py-2 rounded border bg-background text-foreground"
-        />
-        <div className="flex gap-2">
-          <Button
-            onClick={() => updateGameState({ isCreatingGame: true })}
-            variant={gameState.isCreatingGame ? "default" : "outline"}
-            className="flex-1"
-          >
-            <Trophy className="mr-2 h-4 w-4" />
-            Create Room
-          </Button>
-          <Button
-            onClick={() => updateGameState({ isCreatingGame: false })}
-            variant={!gameState.isCreatingGame ? "default" : "outline"}
-            className="flex-1"
-          >
-            <Users className="mr-2 h-4 w-4" />
-            Join Room
-          </Button>
-        </div>
-        {gameState.isCreatingGame ? (
-          <>
-            <input
-              type="number"
-              placeholder="Number of Rounds"
-              value={gameState.totalRounds}
-              onChange={(e) => updateGameState({ totalRounds: +e.target.value })}
-              className="w-full px-3 py-2 rounded border bg-background text-foreground"
-              min={1}
-            />
-            <Button
-              onClick={() => {
-                // Generate random 6-char code
-                const newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-                updateGameState({
-                  roomCode: newCode,
-                  showRoomCode: true,
-                  gameStarted: true,
-                  isHost: true,
-                });
-              }}
-              className="w-full"
-            >
-              Create Room
-            </Button>
-          </>
-        ) : (
-          <>
-            <input
-              type="text"
-              placeholder="Enter room code"
-              value={gameState.roomCode}
-              onChange={(e) => updateGameState({ roomCode: e.target.value.toUpperCase() })}
-              className="w-full px-3 py-2 rounded border bg-background text-foreground"
-            />
-            <Button
-              onClick={() => updateGameState({ gameStarted: true })}
-              className="w-full"
-            >
-              Join Room
-            </Button>
-          </>
-        )}
-        {gameState.showRoomCode && (
-          <Card className="bg-accent">
-            <CardContent className="p-4">
-              <p className="font-mono text-center">
-                Room Code: <span className="font-bold">{gameState.roomCode}</span>
-              </p>
-              <p className="text-sm text-center mt-2">Share this code with friends!</p>
-            </CardContent>
-          </Card>
-        )}
-        {gameState.connectionError && (
-          <Card className="bg-destructive">
-            <CardContent className="p-4 text-destructive-foreground">
-              {gameState.connectionError}
-            </CardContent>
-          </Card>
-        )}
-      </CardContent>
-    </Card>
-  );
-
   return (
     <div className="min-h-screen bg-background text-foreground p-4 md:p-8">
       <div className="container mx-auto max-w-6xl">
-        {!gameState.gameStarted ? <SetupScreen /> : <GameBoard />}
+        {!hasJoinedRoom ? <SetupScreen /> : <GameBoard />}
       </div>
     </div>
   );
