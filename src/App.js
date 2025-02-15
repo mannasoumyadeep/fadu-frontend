@@ -8,7 +8,7 @@ import { cn } from './lib/utils';
 function App() {
   const [gameState, setGameState] = useState({
     roomCode: '',
-    isCreatingRoom: true,
+    isCreatingGame: true,
     gameStarted: false,
     players: [],
     currentTurn: null,
@@ -20,13 +20,14 @@ function App() {
     connectionError: '',
     callResult: null,
     gameStatus: 'waiting',
+    isHost: false,
     deckCount: 52,
     totalRounds: 1,
     currentRound: 1,
     finalResults: null,
   });
 
-  // Use environment variable or fallback to localhost
+  // Change this to your actual backend URL or set it in Netlify as REACT_APP_BACKEND_URL
   const backendURL = process.env.REACT_APP_BACKEND_URL || "http://localhost:8080";
 
   const updateGameState = useCallback(
@@ -37,6 +38,7 @@ function App() {
     []
   );
 
+  // Convert a card object {suit, value} into an image path
   const getCardImageURL = useCallback((card) => {
     if (!card) return null;
     const valueMap = { 1: "ace", 11: "jack", 12: "queen", 13: "king" };
@@ -44,48 +46,65 @@ function App() {
     return `/playing-cards/${valueStr}_of_${card.suit.toLowerCase()}.png`;
   }, []);
 
+  // Socket setup
   useEffect(() => {
+    // Only connect after we have playerName, roomCode, and gameStarted = true
     if (!gameState.playerName || !gameState.roomCode || !gameState.gameStarted) return;
+
     const socket = io(backendURL, {
       transports: ['websocket'],
-      query: { playerName: gameState.playerName, roomCode: gameState.roomCode },
+      query: {
+        playerName: gameState.playerName,
+        roomCode: gameState.roomCode,
+      },
     });
 
     socket.on('connect', () => {
       socket.emit('join_room', {
         room_id: gameState.roomCode,
         player_id: gameState.playerName,
+        is_host: gameState.isCreatingGame,
       });
     });
 
+    // Define all socket event handlers
     const socketEvents = {
       game_state: (data) => {
         updateGameState((prev) => ({
           ...prev,
-          players: data.players.map(pid => ({
-            id: pid,
-            name: pid,
-            hand: pid === gameState.playerName ? data.hand : [],
-            score: 0,
-            isHost: data.host_id === pid,
-          })),
+          players: prev.players.find((p) => p.id === prev.playerName)
+            ? prev.players
+            : [
+                ...prev.players,
+                {
+                  id: prev.playerName,
+                  name: prev.playerName,
+                  hand: data.hand,
+                  score: 0,
+                  isHost: data.is_host,
+                },
+              ],
           currentTurn: data.current_turn,
           tableCards: data.table_cards || [],
           deckCount: data.deck_count,
           gameStatus: data.game_status || 'waiting',
+          isHost: data.is_host,
           currentRound: data.current_round || 1,
         }));
       },
       player_joined: (data) => {
-        updateGameState(prev => ({
+        updateGameState((prev) => ({
           ...prev,
-          players: data.players.map(pid => ({
-            id: pid,
-            name: pid,
-            hand: prev.players.find(p => p.id === pid)?.hand || [],
-            score: 0,
-            isHost: data.host_id === pid,
-          })),
+          players: data.players.map((pid) => {
+            const existing = prev.players.find((p) => p.id === pid);
+            return {
+              id: pid,
+              name: pid,
+              hand: existing?.hand || [],
+              score: existing?.score || 0,
+              isHost: data.host_id === pid,
+            };
+          }),
         }));
       },
       game_started: (data) => {
@@ -106,10 +125,12 @@ function App() {
         });
       },
       hand_updated: (data) => {
-        updateGameState(prev => ({
+        updateGameState((prev) => ({
           ...prev,
-          players: prev.players.map(player =>
-            player.id === gameState.playerName ? { ...player, hand: data.hand } : player
+          players: prev.players.map((player) =>
+            player.id === prev.playerName
+              ? { ...player, hand: data.hand }
+              : player
           ),
           deckCount: data.deck_count,
         }));
@@ -146,43 +167,59 @@ function App() {
       },
     };
 
+    // Register socket events
     for (const [event, handler] of Object.entries(socketEvents)) {
       socket.on(event, handler);
     }
 
     updateGameState({ socket });
+
+    // Cleanup on unmount
     return () => socket.disconnect();
   }, [
     gameState.playerName,
     gameState.roomCode,
     gameState.gameStarted,
-    gameState.isCreatingRoom,
+    gameState.isCreatingGame,
     backendURL,
     updateGameState,
-    gameState.playerName,
   ]);
 
+  // Handle selecting cards in the hand
   const handleCardSelect = useCallback(
     (index) => {
       if (gameState.currentTurn !== gameState.playerName) return;
-      setGameState(prev => {
+      setGameState((prev) => {
         const newSelected = new Set(prev.selectedCards);
-        const myHand = prev.players.find(p => p.id === prev.playerName)?.hand || [];
-        const clicked = myHand[index];
-        if (newSelected.has(index)) newSelected.delete(index);
-        else newSelected.add(index);
+        const myHand = prev.players.find((p) => p.id === prev.playerName)?.hand || [];
+        const clickedCard = myHand[index];
+
+        if (prev.selectedCards.size === 0) {
+          newSelected.add(index);
+        } else {
+          // Only allow selecting more if same value
+          const firstSelectedCard = myHand[Array.from(prev.selectedCards)[0]];
+          if (clickedCard.value === firstSelectedCard.value) {
+            if (newSelected.has(index)) {
+              newSelected.delete(index);
+            } else {
+              newSelected.add(index);
+            }
+          }
+        }
         return { ...prev, selectedCards: newSelected };
       });
     },
     [gameState.currentTurn, gameState.playerName, gameState.players]
   );
 
+  // Actions that emit socket events
   const gameActions = {
     startGame: () => {
-      const { socket, totalRounds, players } = gameState;
-      if (socket && players.length >= 2) {
+      const { socket, isHost, roomCode, totalRounds, players } = gameState;
+      if (socket && isHost && players.length >= 2) {
         socket.emit('start_game', {
-          room_id: gameState.roomCode,
+          room_id: roomCode,
           total_rounds: totalRounds,
         });
       }
@@ -210,7 +247,10 @@ function App() {
     },
   };
 
+  // Board / UI
+
   const GameBoard = () => {
+    // If gameStatus is "final", show final results
     if (gameState.gameStatus === 'final' && gameState.finalResults) {
       const { scores, winners } = gameState.finalResults;
       return (
@@ -221,7 +261,9 @@ function App() {
           <CardContent>
             <ul>
               {Object.entries(scores).map(([pid, sc]) => (
-                <li key={pid}>{pid}: {sc} points</li>
+                <li key={pid}>
+                  {pid}: {sc} points
+                </li>
               ))}
             </ul>
             <p>Winner(s): {winners.join(', ')}</p>
@@ -229,6 +271,7 @@ function App() {
         </Card>
       );
     }
+
     return (
       <div className="space-y-8">
         <div className="flex justify-between items-center">
@@ -237,19 +280,34 @@ function App() {
             <span className="text-sm">Deck: {gameState.deckCount} cards</span>
             <span className="text-sm">Round: {gameState.currentRound}</span>
           </div>
-          {gameState.players.length >= 2 && gameState.players[0].id === gameState.playerName && gameState.gameStatus === 'waiting' && (
-            <Button onClick={gameActions.startGame}>Start Game</Button>
+          {gameState.isHost && gameState.gameStatus === 'waiting' && (
+            <Button
+              onClick={gameActions.startGame}
+              disabled={gameState.players.length < 2}
+            >
+              Start Game
+            </Button>
           )}
         </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Players List */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold">Players</h3>
-              <span className="text-sm">{gameState.players.length}/4 Players</span>
+              <span className="text-sm">
+                {gameState.players.length}/{4} Players
+              </span>
             </div>
             <div className="grid gap-2">
-              {gameState.players.map(pl => (
-                <Card key={pl.id} className={cn("w-full shadow-md", gameState.currentTurn === pl.id ? "bg-primary/10" : "bg-background")}>
+              {gameState.players.map((pl) => (
+                <Card
+                  key={pl.id}
+                  className={cn(
+                    "w-full shadow-md",
+                    gameState.currentTurn === pl.id ? "bg-primary/10" : "bg-background"
+                  )}
+                >
                   <CardHeader className="p-4 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       {pl.isHost && <Crown className="h-4 w-4 text-yellow-500" />}
@@ -265,6 +323,8 @@ function App() {
               ))}
             </div>
           </div>
+
+          {/* Table Cards */}
           <Card className="h-full">
             <CardHeader className="p-4">
               <h3 className="text-lg font-semibold">Table Cards</h3>
@@ -274,7 +334,11 @@ function App() {
                 {gameState.tableCards.length > 0 ? (
                   gameState.tableCards.map((card, idx) => (
                     <div key={idx} className="playing-card">
-                      <img src={getCardImageURL(card)} alt={`${card.value} of ${card.suit}`} className="w-full h-full object-contain" />
+                      <img
+                        src={getCardImageURL(card)}
+                        alt={`${card.value} of ${card.suit}`}
+                        className="w-full h-full object-contain"
+                      />
                     </div>
                   ))
                 ) : (
@@ -284,32 +348,69 @@ function App() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Your Hand */}
         {gameState.gameStatus !== 'waiting' && (
           <Card className="mt-8">
             <CardHeader className="p-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold">Your Hand</h3>
-                {gameState.currentTurn === gameState.playerName && <span className="text-sm text-green-500">Your turn!</span>}
+                {gameState.currentTurn === gameState.playerName && (
+                  <span className="text-sm text-green-500">Your turn!</span>
+                )}
               </div>
             </CardHeader>
             <CardContent className="p-4">
               <div className="flex flex-wrap gap-2 justify-center">
-                {gameState.players.find(p => p.id === gameState.playerName)?.hand.map((card, idx) => (
-                  <div key={idx} onClick={() => handleCardSelect(idx)} className={cn("playing-card", gameState.selectedCards.has(idx) && "selected", gameState.currentTurn === gameState.playerName ? "" : "disabled")}>
-                    <img src={getCardImageURL(card)} alt={`${card.value} of ${card.suit}`} className="w-full h-full object-contain" />
-                  </div>
-                ))}
+                {gameState.players
+                  .find((p) => p.id === gameState.playerName)
+                  ?.hand.map((card, idx) => (
+                    <div
+                      key={idx}
+                      onClick={() => handleCardSelect(idx)}
+                      className={cn(
+                        "playing-card",
+                        gameState.selectedCards.has(idx) && "selected",
+                        gameState.currentTurn === gameState.playerName ? "" : "disabled"
+                      )}
+                    >
+                      <img
+                        src={getCardImageURL(card)}
+                        alt={`${card.value} of ${card.suit}`}
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                  ))}
               </div>
+
               <div className="flex justify-center gap-4 mt-6">
-                <Button onClick={gameActions.drawCard} disabled={gameState.currentTurn !== gameState.playerName || gameState.deckCount === 0} variant="secondary">
+                <Button
+                  onClick={gameActions.drawCard}
+                  disabled={
+                    gameState.currentTurn !== gameState.playerName ||
+                    gameState.deckCount === 0
+                  }
+                  variant="secondary"
+                >
                   <RefreshCcw className="mr-2 h-4 w-4" />
                   Draw Card ({gameState.deckCount})
                 </Button>
-                <Button onClick={gameActions.playCards} disabled={gameState.currentTurn !== gameState.playerName || gameState.selectedCards.size === 0}>
+                <Button
+                  onClick={gameActions.playCards}
+                  disabled={
+                    gameState.currentTurn !== gameState.playerName ||
+                    gameState.selectedCards.size === 0
+                  }
+                >
                   <Play className="mr-2 h-4 w-4" />
-                  Play {gameState.selectedCards.size} Card{gameState.selectedCards.size !== 1 && 's'}
+                  Play {gameState.selectedCards.size} Card
+                  {gameState.selectedCards.size !== 1 && 's'}
                 </Button>
-                <Button onClick={gameActions.callGame} disabled={gameState.currentTurn !== gameState.playerName} variant="destructive">
+                <Button
+                  onClick={gameActions.callGame}
+                  disabled={gameState.currentTurn !== gameState.playerName}
+                  variant="destructive"
+                >
                   <HandMetal className="mr-2 h-4 w-4" />
                   Call
                 </Button>
@@ -317,6 +418,8 @@ function App() {
             </CardContent>
           </Card>
         )}
+
+        {/* Call Result (if any) */}
         {gameState.callResult && (
           <Card className="mt-4">
             <CardContent className="p-4">
@@ -328,7 +431,9 @@ function App() {
                   <h5 className="font-medium mb-2">Hand Totals:</h5>
                   <ul className="space-y-1">
                     {Object.entries(gameState.callResult.player_sums).map(([pid, total]) => (
-                      <li key={pid} className="text-sm">{pid}: {total} points</li>
+                      <li key={pid} className="text-sm">
+                        {pid}: {total} points
+                      </li>
                     ))}
                   </ul>
                 </div>
@@ -336,7 +441,9 @@ function App() {
                   <h5 className="font-medium mb-2">Scores:</h5>
                   <ul className="space-y-1">
                     {Object.entries(gameState.callResult.scores).map(([pid, score]) => (
-                      <li key={pid} className="text-sm">{pid}: {score} points</li>
+                      <li key={pid} className="text-sm">
+                        {pid}: {score} points
+                      </li>
                     ))}
                   </ul>
                 </div>
@@ -361,34 +468,67 @@ function App() {
           onChange={(e) => updateGameState({ playerName: e.target.value })}
           className="w-full px-3 py-2 rounded border bg-background text-foreground"
         />
-        <input
-          type="text"
-          placeholder="Enter room code (leave blank to create new)"
-          value={gameState.roomCode}
-          onChange={(e) => updateGameState({ roomCode: e.target.value.toUpperCase() })}
-          className="w-full px-3 py-2 rounded border bg-background text-foreground"
-        />
-        <input
-          type="number"
-          placeholder="Total Rounds"
-          value={gameState.totalRounds}
-          onChange={(e) => updateGameState({ totalRounds: +e.target.value })}
-          className="w-full px-3 py-2 rounded border bg-background text-foreground"
-          min={1}
-        />
-        <Button
-          onClick={() => {
-            let code = gameState.roomCode;
-            if (!code) {
-              code = Math.random().toString(36).substring(2, 8).toUpperCase();
-              updateGameState({ roomCode: code, showRoomCode: true });
-            }
-            updateGameState({ gameStarted: true, isCreatingRoom: true });
-          }}
-          className="w-full"
-        >
-          Join / Create Room
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={() => updateGameState({ isCreatingGame: true })}
+            variant={gameState.isCreatingGame ? "default" : "outline"}
+            className="flex-1"
+          >
+            <Trophy className="mr-2 h-4 w-4" />
+            Create Room
+          </Button>
+          <Button
+            onClick={() => updateGameState({ isCreatingGame: false })}
+            variant={!gameState.isCreatingGame ? "default" : "outline"}
+            className="flex-1"
+          >
+            <Users className="mr-2 h-4 w-4" />
+            Join Room
+          </Button>
+        </div>
+        {gameState.isCreatingGame ? (
+          <>
+            <input
+              type="number"
+              placeholder="Number of Rounds"
+              value={gameState.totalRounds}
+              onChange={(e) => updateGameState({ totalRounds: +e.target.value })}
+              className="w-full px-3 py-2 rounded border bg-background text-foreground"
+              min={1}
+            />
+            <Button
+              onClick={() => {
+                // Generate random 6-char code
+                const newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+                updateGameState({
+                  roomCode: newCode,
+                  showRoomCode: true,
+                  gameStarted: true,
+                  isHost: true,
+                });
+              }}
+              className="w-full"
+            >
+              Create Room
+            </Button>
+          </>
+        ) : (
+          <>
+            <input
+              type="text"
+              placeholder="Enter room code"
+              value={gameState.roomCode}
+              onChange={(e) => updateGameState({ roomCode: e.target.value.toUpperCase() })}
+              className="w-full px-3 py-2 rounded border bg-background text-foreground"
+            />
+            <Button
+              onClick={() => updateGameState({ gameStarted: true })}
+              className="w-full"
+            >
+              Join Room
+            </Button>
+          </>
+        )}
         {gameState.showRoomCode && (
           <Card className="bg-accent">
             <CardContent className="p-4">
