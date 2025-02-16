@@ -3,7 +3,7 @@ import { io } from 'socket.io-client';
 import { Card, CardContent, CardHeader } from "./components/ui/card";
 import { Button } from "./components/ui/button";
 import { Alert, AlertDescription } from "./components/ui/alert";
-import { Trophy, Users, RefreshCcw, HandMetal, Crown, Play, Cards } from 'lucide-react';
+import { Trophy, Users, RefreshCcw, HandMetal, Crown, Play, LayersThree } from 'lucide-react';
 import { cn } from './lib/utils';
 
 const App = () => {
@@ -315,7 +315,7 @@ const App = () => {
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="flex items-center gap-2">
-                      <Cards className="h-4 w-4" />
+                      <LayersThree className="h-4 w-4" />
                       <span>{player.cardCount || 0}</span>
                     </div>
                     <div className="flex items-center gap-2">
