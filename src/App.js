@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { io } from 'socket.io-client';
-import { Card, CardContent, CardHeader } from "/components/ui/card";
-import { Button } from "/components/ui/button";
-import { Alert, AlertDescription } from "/components/ui/alert";
+import { Card, CardContent, CardHeader } from "./components/ui/card";
+import { Button } from "./components/ui/button";
+import { Alert, AlertDescription } from "./components/ui/alert";
 import { Trophy, Users, RefreshCcw, HandMetal, Crown, Play, Cards } from 'lucide-react';
 import { cn } from './lib/utils';
 
@@ -43,7 +43,6 @@ const App = () => {
     return `/playing-cards/${value}_of_${card.suit.toLowerCase()}.png`;
   }, []);
 
-  // Socket connection and event handlers
   useEffect(() => {
     if (!gameState.isJoined) return;
 
@@ -73,14 +72,12 @@ const App = () => {
           gamePaused: data.game_paused
         });
       },
-
       player_joined: (data) => {
         updateGameState({ 
           players: data.players,
           error: ''
         });
       },
-
       player_disconnected: (data) => {
         updateGameState({
           gamePaused: true,
@@ -88,7 +85,6 @@ const App = () => {
           error: `Game paused: Waiting for ${data.player_id} to reconnect...`
         });
       },
-
       game_started: (data) => {
         updateGameState({
           gameStarted: true,
@@ -100,7 +96,6 @@ const App = () => {
           error: ''
         });
       },
-
       cards_played: (data) => {
         updateGameState({
           tableCards: data.table_cards,
@@ -113,7 +108,6 @@ const App = () => {
           }))
         });
       },
-
       hand_updated: (data) => {
         updateGameState({
           hand: data.hand,
@@ -121,14 +115,9 @@ const App = () => {
           error: ''
         });
       },
-
       call_result: (data) => {
-        updateGameState({
-          callResult: data,
-          error: ''
-        });
+        updateGameState({ callResult: data, error: '' });
       },
-
       round_started: (data) => {
         updateGameState({
           tableCards: [],
@@ -145,7 +134,6 @@ const App = () => {
           error: ''
         });
       },
-
       game_over: (data) => {
         const winners = data.winners.join(', ');
         updateGameState({
@@ -153,11 +141,9 @@ const App = () => {
           error: `Game Over! Winner(s): ${winners}`
         });
       },
-
       error: (data) => {
         updateGameState({ error: data.message });
       },
-
       game_forfeited: (data) => {
         updateGameState({
           gameStatus: 'finished',
@@ -195,7 +181,6 @@ const App = () => {
         });
       }
     },
-
     playCards: () => {
       if (!gameState.gamePaused && gameState.socket && 
           gameState.currentTurn === gameState.playerName && 
@@ -206,7 +191,6 @@ const App = () => {
         });
       }
     },
-
     drawCard: () => {
       if (!gameState.gamePaused && gameState.socket) {
         gameState.socket.emit('draw_card', {
@@ -214,7 +198,6 @@ const App = () => {
         });
       }
     },
-
     callGame: () => {
       if (!gameState.gamePaused && gameState.socket) {
         gameState.socket.emit('call', {
@@ -223,8 +206,6 @@ const App = () => {
       }
     }
   };
-
-  // UI Components
   const SetupScreen = () => (
     <Card className="w-full max-w-md mx-auto mt-8">
       <CardHeader className="text-center">
@@ -349,8 +330,8 @@ const App = () => {
         </div>
 
         {/* Table Cards */}
-        <Card>
-          <CardHeader>
+        <Card className="h-full">
+          <CardHeader className="p-4">
             <h3 className="text-lg font-semibold">Table Cards</h3>
           </CardHeader>
           <CardContent className="p-4">
@@ -385,7 +366,7 @@ const App = () => {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-wrap gap-2 justify-center">
+            <div className="flex flex-wrap gap-2 justify-center mb-6">
               {gameState.hand.map((card, idx) => (
                 <div
                   key={idx}
@@ -405,8 +386,7 @@ const App = () => {
               ))}
             </div>
 
-            {/* Game Actions */}
-            <div className="flex justify-center gap-4 mt-6">
+            <div className="flex justify-center gap-4">
               <Button
                 onClick={gameActions.drawCard}
                 disabled={
@@ -415,10 +395,12 @@ const App = () => {
                   gameState.gamePaused
                 }
                 variant="secondary"
+                className="flex items-center"
               >
                 <RefreshCcw className="mr-2 h-4 w-4" />
                 Draw Card ({gameState.deckCount})
               </Button>
+
               <Button
                 onClick={gameActions.playCards}
                 disabled={
@@ -426,10 +408,12 @@ const App = () => {
                   gameState.selectedCards.length === 0 ||
                   gameState.gamePaused
                 }
+                className="flex items-center"
               >
                 <Play className="mr-2 h-4 w-4" />
                 Play {gameState.selectedCards.length} Card{gameState.selectedCards.length !== 1 && 's'}
               </Button>
+
               <Button
                 onClick={gameActions.callGame}
                 disabled={
@@ -437,6 +421,7 @@ const App = () => {
                   gameState.gamePaused
                 }
                 variant="destructive"
+                className="flex items-center"
               >
                 <HandMetal className="mr-2 h-4 w-4" />
                 Call
@@ -481,7 +466,6 @@ const App = () => {
     </div>
   );
 
-  // Render main app
   return (
     <div className="min-h-screen bg-background text-foreground p-4 md:p-8">
       <div className="container mx-auto max-w-6xl">
